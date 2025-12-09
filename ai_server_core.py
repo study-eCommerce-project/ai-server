@@ -2,20 +2,29 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import json
 
 load_dotenv()
-
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-
-# -----------------------------
-# GPT에게 상품 설명 생성 요청
-# -----------------------------
-def generate_product_description(product: dict) -> str:
-
+def generate_product_description(product: dict) -> list:
     prompt = f"""
 너는 남녀 공용 캐주얼 의류 쇼핑몰의 상품 상세 페이지를 작성하는 카피라이터야.
-아래 정보를 참고해서 한국어로 300~500자 정도의 상세 설명을 써줘.
+
+아래 정보와 이미지들을 참고해서, 상세 페이지에 사용할 텍스트 블록과 이미지 블록을 JSON 배열 형태로 만들어줘.
+
+반드시 아래 형식(JSON array)으로만 출력해:
+[
+  {{ "type": "text", "content": "문단 내용" }},
+  {{ "type": "image", "url": "이미지 URL" }}
+]
+
+규칙:
+- 300~500자 설명을 여러 문단으로 나눠 text 블록 여러 개로 작성
+- 각 문단은 2~4문장
+- 문단 사이에 이미지 블록을 적절히 배치
+- 이미지 URL은 제공된 image_urls 그대로 사용
+- JSON 외의 다른 텍스트는 절대 넣지 마
 
 [상품 정보]
 - 상품명: {product.get("name")}
@@ -23,14 +32,12 @@ def generate_product_description(product: dict) -> str:
 - 옵션: {product.get("options")}
 - 카테고리: {product.get("category_path")}
 
-이미지를 참고해서 실루엣·핏·색감·디테일·무드를 자연스럽게 설명해줘.
+이미지 URL들:
+{product.get("image_urls")}
 """
 
     image_contents = [
-        {
-            "type": "image_url",
-            "image_url": {"url": url}
-        }
+        {"type": "image_url", "image_url": {"url": url}}
         for url in product.get("image_urls", [])
         if url
     ]
@@ -48,27 +55,5 @@ def generate_product_description(product: dict) -> str:
         ],
     )
 
-    return response.choices[0].message.content.strip()
-
-
-# -----------------------------
-# 설명 + 이미지 블록 조합 생성
-# -----------------------------
-def generate_blocks(description_text: str, image_urls: list):
-    blocks = []
-
-    # 설명 먼저 넣고
-    blocks.append({
-        "type": "text",
-        "content": description_text
-    })
-
-    # 뒤에 이미지 1장씩 넣기
-    for url in image_urls:
-        if url:
-            blocks.append({
-                "type": "image",
-                "url": url
-            })
-
-    return blocks
+    json_text = response.choices[0].message.content
+    return json.loads(json_text)
